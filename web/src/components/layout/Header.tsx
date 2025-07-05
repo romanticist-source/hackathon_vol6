@@ -1,6 +1,6 @@
 
-import { Monitor, User } from "lucide-react"
-import { SignInButton, SignOutButton } from "../auth/AuthButton"
+import { Monitor } from "lucide-react"
+import { AuthButton } from "../auth/AuthButton"
 
 export default function Header() {
   return (
@@ -16,14 +16,8 @@ export default function Header() {
             </h1>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <User className="w-5 h-5 text-slate-400" />
-              <div className="flex space-x-2">
-                <SignInButton />
-                <SignOutButton />
-              </div>
-            </div>
+          <div className="flex items-center">
+            <AuthButton />
           </div>
         </div>
       </div>
