@@ -6,7 +6,9 @@
 		"useIgnoreFile": false
 	},
 	"files": {
-		"ignoreUnknown": false
+		"ignoreUnknown": false,
+		"includes": ["./web"],
+		"experimentalScannerIgnores": [".next"]
 	},
 	"formatter": {
 		"enabled": true,
