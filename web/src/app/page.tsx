@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { Sparkles, Zap, Monitor } from "lucide-react"
 import HtmlViewerPanel from "../components/htmlViewer/HtmlViewerPanel"
-import { htmlSnippets } from "../../lib/html-Sample"
-
+import { htmlSnippets } from "../../src/lib/html-Sample"
 
 export default function ModernHTMLViewer() {
   const [html, setHtml] = useState("<h1>Hello World!</h1>")

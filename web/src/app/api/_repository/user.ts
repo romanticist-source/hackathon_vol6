@@ -1,9 +1,5 @@
 import { UserCreateInterface, UserUpdateInterface } from '@/app/schema/user';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-
+import { prisma } from '@/lib/prisma';
 
 /**
  * ユーザーをupsert（存在しない場合は作成、存在する場合は更新）
