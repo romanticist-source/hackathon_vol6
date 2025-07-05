@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Sparkles, Zap, Monitor } from "lucide-react"
-import HtmlViewerPanel from "../../components/html-viewer-panel"
+import HtmlViewerPanel from "../components/htmlViewer/HtmlViewerPanel"
 import { htmlSnippets } from "../../lib/html-Sample"
 
 
