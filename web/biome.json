@@ -8,7 +8,7 @@
   "files": {
     "ignoreUnknown": false,
     "includes": ["./web"],
-    "ignore": [".next"]
+    "experimentalScannerIgnores": [".next"]
   },
   "formatter": {
     "enabled": true,
