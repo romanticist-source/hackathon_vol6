@@ -1,0 +1,64 @@
+{
+  "name": "browser-to-vscode-sync",
+  "displayName": "Browser to VSCode Sync",
+  "description": "ブラウザの開発者ツールで行ったHTML/CSSの変更をVS Codeにリアルタイム同期",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:browser-to-vscode-sync.startServer",
+    "onCommand:browser-to-vscode-sync.stopServer"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "browser-to-vscode-sync.startServer",
+        "title": "Start Browser Sync Server"
+      },
+      {
+        "command": "browser-to-vscode-sync.stopServer",
+        "title": "Stop Browser Sync Server"
+      }
+    ],
+    "configuration": {
+      "title": "Browser to VSCode Sync",
+      "properties": {
+        "browserToVscodeSync.workspaceRoot": {
+          "type": "string",
+          "default": "",
+          "description": "ワークスペースのルートパス（例: /path/to/your/project）"
+        },
+        "browserToVscodeSync.port": {
+          "type": "number",
+          "default": 3001,
+          "description": "WebSocketサーバーのポート番号"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "^16.18.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^4.9.0",
+    "webpack": "^5.75.0",
+    "webpack-cli": "^5.0.0",
+    "ts-loader": "^9.4.0"
+  },
+  "dependencies": {
+    "ws": "^8.13.0"
+  }
+}
