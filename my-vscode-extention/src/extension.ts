@@ -1,7 +1,13 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import * as WebSocket from 'ws';
+
+// 変更データのインターフェース定義
+// 必要とあれば今後別ファイルで定義します
+interface changeDate {
+	type : 'attribute' | 'style';
+	selector: string;
+	changes: Record<string, string>;
+}
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -32,7 +38,10 @@ export function activate(context: vscode.ExtensionContext) {
 				ws.on('message', (message) => {
 					outputChannel.appendLine(`受信データ: ${message}`);
 					try {
-						const data = JSON.parse(message.toString());
+						const data: changeDate = JSON.parse(message.toString());
+						outputChannel.appendLine(`受信したセレクタ: ${data.selector}`);
+						// ここでファイル操作ロジックに渡すことができる(らしいw)
+						// 後になんとかする
 					} catch (err) {
 						outputChannel.appendLine(`JSONパース失敗: ${err}`)
 					}
