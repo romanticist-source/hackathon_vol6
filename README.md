@@ -60,12 +60,38 @@ npm run compile
 2. 「デベロッパーモード」を有効にする
 3. 「パッケージ化されていない拡張機能を読み込む」で `browser-extension` フォルダを選択
 
-## 使用方法
+## 使用方法（わかりやすい説明）
 
-1. VS Codeで拡張機能を有効化
-2. Chromeでブラウザ拡張機能を有効化
-3. 開発者ツールでHTML/CSSを編集
-4. 変更が自動的にVS Codeのファイルに同期される
+1. **VS Code拡張機能を起動する**
+   - VS Codeで「vscode-extension」フォルダを開きます。
+   - コマンドパレット（`Cmd+Shift+P` または `Ctrl+Shift+P`）を開き、「Start Browser Sync Server」と入力して実行します。
+   - 「WebSocketサーバーがポート3001で起動しました」と表示されればOKです。
+
+2. **Chrome拡張機能を有効にする**
+   - Chromeで `chrome://extensions/` を開きます。
+   - 「デベロッパーモード」をONにして、「パッケージ化されていない拡張機能を読み込む」から`browser-extension`フォルダを選択します。
+   - ツールバーに「Browser to VSCode Sync」のアイコンが表示されていればOKです。
+
+3. **ローカルサーバーで自分のHTMLページを開く**
+   - ターミナルで自分のHTMLファイルがあるフォルダに移動し、ローカルサーバーを起動します（例：`npx serve .` や `python3 -m http.server`）。
+   - Chromeで `http://localhost:3000` などにアクセスします。
+
+4. **Chromeの開発者ツールでHTMLやCSSを編集する**
+   - Chromeで表示しているページで `F12` を押して開発者ツールを開きます。
+   - 「Elements」タブでHTML要素の`id`や`class`、`style`属性を編集します。
+
+5. **VS Codeのファイルが自動で書き換わるか確認する**
+   - さきほど編集した内容が、VS Codeで開いているHTMLファイルやCSSファイルに**自動で反映されているか**確認します。
+
+---
+
+#### もっと簡単にまとめると
+
+1. VS Codeで拡張機能を起動
+2. Chromeで拡張機能を有効化
+3. ローカルサーバーで自分のページを開く
+4. Chromeの開発者ツールでHTML/CSSを編集
+5. その変更がVS Codeのファイルに自動で反映される！
 
 ## 開発者
 
