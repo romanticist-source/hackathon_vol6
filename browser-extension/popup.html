@@ -1,102 +1,222 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 
 <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8" />
     <style>
         body {
-            width: 300px;
-            padding: 20px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 16px;
+            width: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
         }
 
         .header {
-            text-align: center;
-            margin-bottom: 20px;
+            background-color: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
-        .header h1 {
-            margin: 0;
+        .title {
             font-size: 18px;
-            color: #333;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0 0 12px 0;
         }
 
         .status {
             display: flex;
             align-items: center;
-            margin-bottom: 15px;
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #f5f5f5;
+            margin-bottom: 16px;
         }
 
         .status-indicator {
-            width: 12px;
-            height: 12px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            margin-right: 10px;
+            margin-right: 8px;
         }
 
         .status-indicator.connected {
-            background-color: #4CAF50;
+            background-color: #10b981;
         }
 
         .status-indicator.disconnected {
-            background-color: #f44336;
+            background-color: #ef4444;
         }
 
         .status-text {
             font-size: 14px;
-            color: #666;
+            color: #6b7280;
         }
 
-        .info {
+        .usage-info {
+            background-color: #f3f4f6;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+        }
+
+        .usage-info h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #374151;
+        }
+
+        .usage-info ol {
+            margin: 0;
+            padding-left: 20px;
             font-size: 12px;
-            color: #888;
-            line-height: 1.4;
-            margin-bottom: 15px;
+            color: #6b7280;
         }
 
-        .button {
-            width: 100%;
-            padding: 10px;
-            background-color: #007acc;
+        .usage-info li {
+            margin-bottom: 4px;
+        }
+
+        .reconnect-button {
+            background-color: #3b82f6;
             color: white;
             border: none;
-            border-radius: 5px;
+            padding: 12px 24px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 14px;
+            font-weight: 500;
+            width: 100%;
+            margin-bottom: 16px;
         }
 
-        .button:hover {
-            background-color: #005a9e;
+        .reconnect-button:hover {
+            background-color: #2563eb;
         }
 
-        .button:disabled {
-            background-color: #ccc;
+        .reconnect-button:disabled {
+            background-color: #9ca3af;
             cursor: not-allowed;
         }
+
+        .logs-section {
+            background-color: white;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .logs-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0;
+        }
+
+        .clear-button {
+            background-color: #6b7280;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .clear-button:hover {
+            background-color: #4b5563;
+        }
+
+        .log-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 8px;
+            background-color: #fafafa;
+        }
+
+        .log-item {
+            font-size: 12px;
+            margin-bottom: 8px;
+            padding: 8px;
+            background-color: white;
+            border-left: 3px solid #3b82f6;
+            border-radius: 3px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .log-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .log-item.addition {
+            border-left-color: #10b981;
+        }
+
+        .log-item.removal {
+            border-left-color: #ef4444;
+        }
+
+        .log-item.attribute {
+            border-left-color: #f59e0b;
+        }
+
+        .log-item.text {
+            border-left-color: #8b5cf6;
+        }
+
+        .no-logs {
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+            padding: 20px;
+        }
     </style>
+    <title>Browser to VSCode Sync</title>
 </head>
 
 <body>
     <div class="header">
-        <h1>Browser to VSCode Sync</h1>
+        <h1 class="title">Browser to VSCode Sync</h1>
+
+        <div class="status">
+            <div class="status-indicator disconnected" id="status-indicator"></div>
+            <span class="status-text" id="status-text">VS Codeに接続していません</span>
+        </div>
+
+        <div class="usage-info">
+            <h4>使用方法:</h4>
+            <ol>
+                <li>VS Code拡張機能を有効化</li>
+                <li>拡張キーツールでHTMLとCSSを監視</li>
+                <li>変更内容が自動的にVS Codeに同期されます</li>
+            </ol>
+        </div>
+
+        <button class="reconnect-button" id="reconnect-button">再接続</button>
     </div>
 
-    <div class="status">
-        <div id="statusIndicator" class="status-indicator disconnected"></div>
-        <div id="statusText" class="status-text">VS Codeに接続していません</div>
-    </div>
+    <div class="logs-section">
+        <div class="logs-header">
+            <h3 class="logs-title">変更ログ</h3>
+            <button class="clear-button" id="clear-button">クリア</button>
+        </div>
 
-    <div class="info">
-        <strong>使用方法:</strong><br>
-        1. VS Codeで拡張機能を有効化<br>
-        2. 開発者ツールでHTML/CSSを編集<br>
-        3. 変更が自動的にVS Codeに同期されます
+        <div class="log-list" id="log-list">
+            <div class="no-logs">まだ変更はありません</div>
+        </div>
     </div>
-
-    <button id="reconnectButton" class="button">再接続</button>
 
     <script src="popup.js"></script>
 </body>

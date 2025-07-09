@@ -10,8 +10,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:browser-to-vscode-sync.startServer",
-    "onCommand:browser-to-vscode-sync.stopServer"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {

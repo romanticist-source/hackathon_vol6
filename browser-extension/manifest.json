@@ -1,15 +1,15 @@
 {
     "manifest_version": 3,
-    "name": "Browser to VSCode Sync",
-    "version": "1.0.0",
-    "description": "ブラウザの開発者ツールで行ったHTML/CSSの変更をVS Codeにリアルタイム同期",
+    "name": "DOM変化ログ表示",
+    "version": "1.0",
+    "description": "MutationObserverのログをポップアップに表示します。",
     "permissions": [
-        "activeTab",
-        "scripting"
+        "storage",
+        "activeTab"
     ],
-    "host_permissions": [
-        "ws://localhost:*"
-    ],
+    "action": {
+        "default_popup": "popup.html"
+    },
     "content_scripts": [
         {
             "matches": [
@@ -18,19 +18,7 @@
             "js": [
                 "content.js"
             ],
-            "run_at": "document_end"
+            "run_at": "document_idle"
         }
-    ],
-    "background": {
-        "service_worker": "background.js"
-    },
-    "action": {
-        "default_popup": "popup.html",
-        "default_title": "Browser to VSCode Sync"
-    },
-    "icons": {
-        "16": "icons/icon16.png",
-        "48": "icons/icon48.png",
-        "128": "icons/icon128.png"
-    }
+    ]
 }
