@@ -1,6 +1,6 @@
-# my-vscode-extention README
+# vscode-extention README
 
-This is the README for your extension "my-vscode-extention". After writing up a brief description, we recommend including the following sections.
+This is the README for your extension "vscode-extention". After writing up a brief description, we recommend including the following sections.
 
 ## Features
 
