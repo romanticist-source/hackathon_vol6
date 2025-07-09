@@ -1,72 +1,99 @@
-// ポップアップのJavaScript
-document.addEventListener('DOMContentLoaded', () => {
-    const statusIndicator = document.getElementById('statusIndicator');
-    const statusText = document.getElementById('statusText');
-    const reconnectButton = document.getElementById('reconnectButton');
+// WebSocket接続状態を管理
+let wsStatus = 'disconnected';
 
-    // 現在のタブを取得
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const currentTab = tabs[0];
+// ログを表示する関数
+function displayLogs() {
+    chrome.storage.local.get({ logs: [] }, (result) => {
+        const logList = document.getElementById("log-list");
+        logList.innerHTML = ''; // 既存のログをクリア
 
-        if (currentTab && (currentTab.url.includes('localhost') || currentTab.url.includes('127.0.0.1'))) {
-            // localhostのページの場合、接続状態を確認
-            checkConnectionStatus();
-        } else {
-            // localhost以外のページの場合
-            statusIndicator.className = 'status-indicator disconnected';
-            statusText.textContent = 'localhostページでのみ動作します';
-            reconnectButton.disabled = true;
+        if (result.logs.length === 0) {
+            const noLogsDiv = document.createElement("div");
+            noLogsDiv.className = "no-logs";
+            noLogsDiv.textContent = "まだ変更はありません";
+            logList.appendChild(noLogsDiv);
+            return;
         }
-    });
 
-    // 再接続ボタンのクリックイベント
-    reconnectButton.addEventListener('click', () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const currentTab = tabs[0];
-            if (currentTab) {
-                // コンテンツスクリプトを再実行
-                chrome.scripting.executeScript({
-                    target: { tabId: currentTab.id },
-                    files: ['content.js']
-                }).then(() => {
-                    statusText.textContent = '再接続中...';
-                    setTimeout(checkConnectionStatus, 2000);
-                }).catch(err => {
-                    console.error('再接続エラー:', err);
-                    statusText.textContent = '再接続に失敗しました';
-                });
+        // 最新のログから表示（逆順）
+        result.logs.reverse().forEach(log => {
+            const logItem = document.createElement("div");
+            logItem.className = "log-item";
+            logItem.textContent = log;
+
+            // ログのタイプに応じてスタイルを設定
+            if (log.includes('要素追加')) {
+                logItem.classList.add('addition');
+            } else if (log.includes('要素削除')) {
+                logItem.classList.add('removal');
+            } else if (log.includes('属性変更')) {
+                logItem.classList.add('attribute');
+            } else if (log.includes('テキスト変更')) {
+                logItem.classList.add('text');
             }
+
+            logList.appendChild(logItem);
         });
     });
+}
 
-    function checkConnectionStatus() {
-        // WebSocket接続状態を確認
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const currentTab = tabs[0];
-            if (currentTab) {
-                chrome.scripting.executeScript({
-                    target: { tabId: currentTab.id },
-                    func: () => {
-                        return window.devToolsObserver && window.devToolsObserver.isConnected;
-                    }
-                }).then((results) => {
-                    const isConnected = results[0]?.result;
+// 接続状態を更新
+function updateConnectionStatus(connected) {
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    const reconnectButton = document.getElementById('reconnect-button');
 
-                    if (isConnected) {
-                        statusIndicator.className = 'status-indicator connected';
-                        statusText.textContent = 'VS Codeに接続中';
-                        reconnectButton.textContent = '再接続';
-                    } else {
-                        statusIndicator.className = 'status-indicator disconnected';
-                        statusText.textContent = 'VS Codeに接続していません';
-                        reconnectButton.textContent = '接続';
-                    }
-                }).catch(err => {
-                    console.error('接続状態確認エラー:', err);
-                    statusIndicator.className = 'status-indicator disconnected';
-                    statusText.textContent = '接続状態を確認できません';
-                });
-            }
-        });
+    if (connected) {
+        statusIndicator.className = 'status-indicator connected';
+        statusText.textContent = 'VS Codeに接続済み';
+        reconnectButton.disabled = true;
+        reconnectButton.textContent = '接続済み';
+    } else {
+        statusIndicator.className = 'status-indicator disconnected';
+        statusText.textContent = 'VS Codeに接続していません';
+        reconnectButton.disabled = false;
+        reconnectButton.textContent = '再接続';
     }
-}); 
+}
+
+// クリアボタンの機能
+function clearLogs() {
+    chrome.storage.local.set({ logs: [] }, () => {
+        displayLogs();
+    });
+}
+
+// 再接続ボタンの機能
+function reconnect() {
+    // content scriptに再接続メッセージを送信
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        chrome.tabs.sendMessage(tabs[0].id, { action: 'reconnect' }, function (response) {
+            if (chrome.runtime.lastError) {
+                console.log('Content script not ready:', chrome.runtime.lastError.message);
+            }
+        });
+    });
+}
+
+// 接続状態をチェック
+function checkConnectionStatus() {
+    chrome.storage.local.get({ wsStatus: 'disconnected' }, (result) => {
+        updateConnectionStatus(result.wsStatus === 'connected');
+    });
+}
+
+// 初期化
+document.addEventListener('DOMContentLoaded', () => {
+    displayLogs();
+    checkConnectionStatus();
+
+    // イベントリスナーを追加
+    document.getElementById('clear-button').addEventListener('click', clearLogs);
+    document.getElementById('reconnect-button').addEventListener('click', reconnect);
+});
+
+// 定期的にログと接続状態を更新
+setInterval(() => {
+    displayLogs();
+    checkConnectionStatus();
+}, 1000);

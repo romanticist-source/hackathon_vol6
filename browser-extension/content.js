@@ -1,239 +1,379 @@
-// 開発者ツールの変更を監視するコンテンツスクリプト
-class DevToolsObserver {
-    constructor() {
-        this.websocket = null;
-        this.isConnected = false;
-        this.port = 3001; // VS Code拡張機能のデフォルトポート
-        this.init();
-    }
+// 監視対象のノード（ここでは body）
+const targetNode = document.body;
 
-    init() {
-        this.connectWebSocket();
-        this.injectObserverScript();
-    }
+// 監視する変化のタイプ
+const config = {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    characterData: true
+};
 
-    connectWebSocket() {
-        try {
-            this.websocket = new WebSocket(`ws://localhost:${this.port}`);
+// 一時的な変更を追跡するためのマップ
+const pendingChanges = new Map();
+const CHANGE_DELAY = 500; // 500ms後に変更が持続していればログに記録
 
-            this.websocket.onopen = () => {
-                console.log('Browser to VSCode Sync: WebSocket接続が確立されました');
-                this.isConnected = true;
-                this.sendMessage({
-                    type: 'connection',
-                    data: {
-                        url: window.location.href,
-                        timestamp: Date.now()
-                    }
-                });
-            };
+// VSCode拡張機能との通信用WebSocketクライアント
+let wsConnection = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
-            this.websocket.onclose = () => {
-                console.log('Browser to VSCode Sync: WebSocket接続が切断されました');
-                this.isConnected = false;
-                // 再接続を試行
-                setTimeout(() => this.connectWebSocket(), 5000);
-            };
+// WebSocket接続を初期化
+function initWebSocketConnection() {
+    try {
+        wsConnection = new WebSocket('ws://localhost:3001');
 
-            this.websocket.onerror = (error) => {
-                console.error('Browser to VSCode Sync: WebSocketエラー:', error);
-                this.isConnected = false;
-            };
+        wsConnection.onopen = () => {
+            console.log('VSCode拡張機能との接続が確立されました');
+            reconnectAttempts = 0;
+            // 接続状態をストレージに保存
+            chrome.storage.local.set({ wsStatus: 'connected' });
+        };
 
-        } catch (error) {
-            console.error('Browser to VSCode Sync: WebSocket接続エラー:', error);
-        }
-    }
+        wsConnection.onclose = () => {
+            console.log('VSCode拡張機能との接続が切断されました');
+            // 接続状態をストレージに保存
+            chrome.storage.local.set({ wsStatus: 'disconnected' });
 
-    sendMessage(message) {
-        if (this.isConnected && this.websocket) {
-            this.websocket.send(JSON.stringify(message));
-        }
-    }
+            // 再接続を試行
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                setTimeout(() => {
+                    console.log(`再接続試行中... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+                    initWebSocketConnection();
+                }, 3000);
+            }
+        };
 
-    injectObserverScript() {
-        // 開発者ツールの変更を監視するスクリプトを注入
-        const script = document.createElement('script');
-        script.textContent = `
-            (function() {
-                // 開発者ツールの変更を監視する関数
-                function observeDevToolsChanges() {
-                    // 属性変更の監視
-                    const originalSetAttribute = Element.prototype.setAttribute;
-                    Element.prototype.setAttribute = function(name, value) {
-                        const result = originalSetAttribute.call(this, name, value);
-                        
-                        // 開発者ツールからの変更かどうかを判定
-                        if (window.devtools && window.devtools.isActive) {
-                            const selector = generateSelector(this);
-                            window.postMessage({
-                                type: 'attribute_change',
-                                data: {
-                                    selector: selector,
-                                    attribute: name,
-                                    value: value,
-                                    url: window.location.href
-                                }
-                            }, '*');
-                        }
-                        
-                        return result;
-                    };
-
-                    // style属性の変更を監視
-                    const originalStyleSetter = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style').set;
-                    Object.defineProperty(HTMLElement.prototype, 'style', {
-                        set: function(value) {
-                            const result = originalStyleSetter.call(this, value);
-                            
-                            if (window.devtools && window.devtools.isActive) {
-                                const selector = generateSelector(this);
-                                window.postMessage({
-                                    type: 'style_change',
-                                    data: {
-                                        selector: selector,
-                                        style: value,
-                                        url: window.location.href
-                                    }
-                                }, '*');
-                            }
-                            
-                            return result;
-                        },
-                        get: function() {
-                            return originalStyleSetter.get.call(this);
-                        }
-                    });
-
-                    // CSSプロパティの変更を監視
-                    const originalCSSStyleDeclaration = CSSStyleDeclaration.prototype.setProperty;
-                    CSSStyleDeclaration.prototype.setProperty = function(property, value, priority) {
-                        const result = originalCSSStyleDeclaration.call(this, property, value, priority);
-                        
-                        if (window.devtools && window.devtools.isActive) {
-                            const element = this.ownerNode || this.ownerElement;
-                            if (element) {
-                                const selector = generateSelector(element);
-                                window.postMessage({
-                                    type: 'style_property_change',
-                                    data: {
-                                        selector: selector,
-                                        property: property,
-                                        value: value,
-                                        url: window.location.href
-                                    }
-                                }, '*');
-                            }
-                        }
-                        
-                        return result;
-                    };
-                }
-
-                // セレクタを生成する関数
-                function generateSelector(element) {
-                    if (element.id) {
-                        return '#' + element.id;
-                    }
-                    
-                    if (element.className) {
-                        const classes = element.className.split(' ').filter(c => c.trim());
-                        if (classes.length > 0) {
-                            return '.' + classes[0];
-                        }
-                    }
-                    
-                    // タグ名と位置でセレクタを生成
-                    const tagName = element.tagName.toLowerCase();
-                    const siblings = Array.from(element.parentNode.children).filter(child => child.tagName === element.tagName);
-                    const index = siblings.indexOf(element);
-                    
-                    if (siblings.length === 1) {
-                        return tagName;
-                    } else {
-                        return tagName + ':nth-child(' + (index + 1) + ')';
-                    }
-                }
-
-                // 開発者ツールの状態を監視
-                let devtools = {
-                    isActive: false,
-                    orientation: null
-                };
-
-                const threshold = 160;
-                const emitEvent = (isOpen, orientation) => {
-                    window.devtools = {
-                        isActive: isOpen,
-                        orientation: orientation
-                    };
-                };
-
-                setInterval(() => {
-                    const widthThreshold = window.outerWidth - window.innerWidth > threshold;
-                    const heightThreshold = window.outerHeight - window.innerHeight > threshold;
-                    const orientation = widthThreshold ? 'vertical' : 'horizontal';
-
-                    if (widthThreshold || heightThreshold) {
-                        if (!devtools.isOpen || devtools.orientation !== orientation) {
-                            emitEvent(true, orientation);
-                        }
-                    } else {
-                        if (devtools.isOpen) {
-                            emitEvent(false, null);
-                        }
-                    }
-                }, 500);
-
-                // 初期化
-                observeDevToolsChanges();
-            })();
-        `;
-
-        document.head.appendChild(script);
+        wsConnection.onerror = (error) => {
+            console.error('WebSocket接続エラー:', error);
+            chrome.storage.local.set({ wsStatus: 'disconnected' });
+        };
+    } catch (error) {
+        console.error('WebSocket接続の初期化に失敗:', error);
+        chrome.storage.local.set({ wsStatus: 'disconnected' });
     }
 }
 
-// メッセージリスナーを設定
-window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
+// VSCode拡張機能にDOM変更を送信
+function sendChangeToVSCode(changeData) {
+    if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+        const message = {
+            type: 'dom_change',
+            timestamp: new Date().toISOString(),
+            url: window.location.href,
+            data: changeData
+        };
 
-    const { type, data } = event.data;
+        wsConnection.send(JSON.stringify(message));
+    }
+}
 
-    switch (type) {
-        case 'attribute_change':
-            if (window.devToolsObserver) {
-                window.devToolsObserver.sendMessage({
-                    type: 'attribute_change',
-                    data: data
-                });
+// 安全にclassNameを取得する関数
+function getClassNameString(element) {
+    if (!element || !element.className) {
+        return '';
+    }
+
+    // SVGAnimatedStringの場合はbaseValプロパティを使用
+    if (typeof element.className === 'object' && element.className.baseVal !== undefined) {
+        return element.className.baseVal;
+    }
+
+    // 通常の文字列の場合
+    if (typeof element.className === 'string') {
+        return element.className;
+    }
+
+    // その他の場合は空文字列を返す
+    return '';
+}
+
+// 要素のCSS セレクタを生成
+function generateCSSSelector(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+        return null;
+    }
+
+    const path = [];
+    let current = element;
+
+    while (current && current.nodeType === Node.ELEMENT_NODE) {
+        let selector = current.tagName.toLowerCase();
+
+        if (current.id) {
+            selector += `#${current.id}`;
+            path.unshift(selector);
+            break; // IDがある場合はそこで停止
+        }
+
+        const classNameStr = getClassNameString(current);
+        if (classNameStr) {
+            const classes = classNameStr.trim().split(/\s+/);
+            selector += '.' + classes.join('.');
+        }
+
+        // 同じタグの兄弟要素がある場合は nth-child を追加
+        const parent = current.parentElement;
+        if (parent) {
+            const siblings = Array.from(parent.children).filter(child =>
+                child.tagName.toLowerCase() === current.tagName.toLowerCase()
+            );
+            if (siblings.length > 1) {
+                const index = siblings.indexOf(current) + 1;
+                selector += `:nth-child(${index})`;
             }
-            break;
+        }
 
-        case 'style_change':
-            if (window.devToolsObserver) {
-                window.devToolsObserver.sendMessage({
-                    type: 'style_change',
-                    data: data
-                });
+        path.unshift(selector);
+        current = current.parentElement;
+    }
+
+    return path.join(' > ');
+}
+
+// 要素の詳細情報を取得
+function getElementDetails(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+        return null;
+    }
+
+    return {
+        tagName: element.tagName.toLowerCase(),
+        id: element.id || null,
+        className: getClassNameString(element) || null,
+        textContent: element.textContent ? element.textContent.substring(0, 100) : null,
+        cssSelector: generateCSSSelector(element),
+        outerHTML: element.outerHTML ? element.outerHTML.substring(0, 200) : null,
+        computedStyle: window.getComputedStyle ? {
+            display: window.getComputedStyle(element).display,
+            position: window.getComputedStyle(element).position,
+            visibility: window.getComputedStyle(element).visibility
+        } : null
+    };
+}
+
+// ログを保存する関数
+function saveLog(logMessage) {
+    chrome.storage.local.get({ logs: [] }, (result) => {
+        const logs = result.logs;
+        logs.push(logMessage);
+        // 最新100件のみ保持
+        if (logs.length > 100) {
+            logs.shift();
+        }
+        chrome.storage.local.set({ logs: logs });
+    });
+}
+
+// 遅延ログ記録関数
+function scheduleLogIfPersistent(changeKey, logMessage, element, attributeName = null, originalValue = null, changeData = null) {
+    // 既存の保留中の変更があればキャンセル
+    if (pendingChanges.has(changeKey)) {
+        clearTimeout(pendingChanges.get(changeKey).timeoutId);
+    }
+
+    // 変更後の状態を記録
+    const changedState = attributeName ?
+        element.getAttribute(attributeName) :
+        element.textContent;
+
+    const timeoutId = setTimeout(() => {
+        // 指定時間後に状態を再確認
+        const finalState = attributeName ?
+            element.getAttribute(attributeName) :
+            element.textContent;
+
+        // 元の値に戻っていない場合はログに記録
+        if (finalState !== originalValue) {
+            saveLog(logMessage);
+
+            // VSCode拡張機能に変更を送信
+            if (changeData) {
+                sendChangeToVSCode(changeData);
             }
-            break;
+        }
 
-        case 'style_property_change':
-            if (window.devToolsObserver) {
-                window.devToolsObserver.sendMessage({
-                    type: 'style_change',
-                    data: {
-                        url: data.url,
-                        selector: data.selector,
-                        property: data.property,
-                        value: data.value
+        // 保留中の変更から削除
+        pendingChanges.delete(changeKey);
+    }, CHANGE_DELAY);
+
+    pendingChanges.set(changeKey, {
+        timeoutId,
+        logMessage,
+        changedState,
+        originalValue,
+        element
+    });
+}
+
+function getElementInfo(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+        return 'テキストノードまたは不明な要素';
+    }
+
+    const tagName = element.tagName.toLowerCase();
+    const id = element.id ? `#${element.id}` : '';
+    const classNameStr = getClassNameString(element);
+    const className = classNameStr ? `.${classNameStr.replace(/\s+/g, '.')}` : '';
+    const textContent = element.textContent ? element.textContent.substring(0, 50) : '';
+
+    return `<${tagName}${id}${className}>${textContent}${textContent.length > 50 ? '...' : ''}`;
+}
+
+function getElementKey(element, attributeName) {
+    if (!element || !attributeName) return null;
+    const tagName = element.tagName.toLowerCase();
+    const id = element.id || '';
+    const classNameStr = getClassNameString(element);
+    const className = classNameStr ? classNameStr.replace(/\s+/g, '.') : '';
+    return `${tagName}#${id}.${className}.${attributeName}`;
+}
+
+// iframe内の要素かどうかを判定する関数
+function isInsideIframe(element) {
+    let current = element;
+    while (current && current !== document.body) {
+        if (current.tagName && current.tagName.toLowerCase() === 'iframe') {
+            return true;
+        }
+        // iframe内のdocumentの場合
+        if (current.ownerDocument && current.ownerDocument !== document) {
+            return true;
+        }
+        current = current.parentNode || current.parentElement;
+    }
+    return false;
+}
+
+// コールバック関数
+const callback = function (mutationsList, observer) {
+    for (const mutation of mutationsList) {
+        // iframe内の変更は無視
+        if (isInsideIframe(mutation.target)) {
+            continue;
+        }
+
+        const timestamp = new Date().toLocaleTimeString();
+
+        switch (mutation.type) {
+            case 'childList':
+                // 子要素の追加・削除は即座にログに記録（構造的変更のため）
+                if (mutation.addedNodes.length > 0) {
+                    for (const node of mutation.addedNodes) {
+                        if (node.nodeType === Node.ELEMENT_NODE && !isInsideIframe(node)) {
+                            const logMessage = `[${timestamp}] 要素追加: ${getElementInfo(node)} → 親: ${getElementInfo(mutation.target)}`;
+                            saveLog(logMessage);
+
+                            // VSCode拡張機能に送信
+                            const changeData = {
+                                type: 'element_added',
+                                element: getElementDetails(node),
+                                parent: getElementDetails(mutation.target),
+                                timestamp: new Date().toISOString()
+                            };
+                            sendChangeToVSCode(changeData);
+                        }
                     }
-                });
-            }
-            break;
+                }
+                if (mutation.removedNodes.length > 0) {
+                    for (const node of mutation.removedNodes) {
+                        if (node.nodeType === Node.ELEMENT_NODE && !isInsideIframe(node)) {
+                            const logMessage = `[${timestamp}] 要素削除: ${getElementInfo(node)} → 親: ${getElementInfo(mutation.target)}`;
+                            saveLog(logMessage);
+
+                            // VSCode拡張機能に送信
+                            const changeData = {
+                                type: 'element_removed',
+                                element: getElementDetails(node),
+                                parent: getElementDetails(mutation.target),
+                                timestamp: new Date().toISOString()
+                            };
+                            sendChangeToVSCode(changeData);
+                        }
+                    }
+                }
+                break;
+
+            case 'attributes':
+                // 属性変更は遅延ログ記録（hover等の一時的変更を除外）
+                const elementKey = getElementKey(mutation.target, mutation.attributeName);
+                if (elementKey && mutation.target.isConnected) {
+                    const oldValue = mutation.oldValue || '(不明)';
+                    const newValue = mutation.target.getAttribute(mutation.attributeName) || '(削除)';
+
+                    // hover関連の属性変更かどうかを判定
+                    const isHoverRelated = mutation.attributeName === 'class' &&
+                        (oldValue.includes('hover') || newValue.includes('hover'));
+
+                    const logMessage = `[${timestamp}] 属性変更: ${getElementInfo(mutation.target)} → ${mutation.attributeName}: "${oldValue}" → "${newValue}"`;
+
+                    const changeData = {
+                        type: 'attribute_changed',
+                        element: getElementDetails(mutation.target),
+                        attributeName: mutation.attributeName,
+                        oldValue: oldValue,
+                        newValue: newValue,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    if (isHoverRelated) {
+                        // hover関連の場合は遅延ログ記録
+                        scheduleLogIfPersistent(elementKey, logMessage, mutation.target, mutation.attributeName, oldValue, changeData);
+                    } else {
+                        // 通常の属性変更は即座にログ記録
+                        saveLog(logMessage);
+                        sendChangeToVSCode(changeData);
+                    }
+                }
+                break;
+
+            case 'characterData':
+                // テキスト変更は即座にログ記録
+                const logMessage = `[${timestamp}] テキスト変更: "${mutation.oldValue}" → "${mutation.target.textContent}"`;
+                saveLog(logMessage);
+
+                // VSCode拡張機能に送信
+                const changeData = {
+                    type: 'text_changed',
+                    oldValue: mutation.oldValue,
+                    newValue: mutation.target.textContent,
+                    parentElement: getElementDetails(mutation.target.parentElement),
+                    timestamp: new Date().toISOString()
+                };
+                sendChangeToVSCode(changeData);
+                break;
+        }
+    }
+};
+
+// オブザーバーを作成
+const observer = new MutationObserver(callback);
+
+// 監視を開始（oldValueも取得するように設定を更新）
+const enhancedConfig = {
+    ...config,
+    attributeOldValue: true,
+    characterDataOldValue: true
+};
+
+observer.observe(targetNode, enhancedConfig);
+
+// WebSocket接続を初期化
+initWebSocketConnection();
+
+console.log("MutationObserverによる監視を開始しました。");
+console.log("VSCode拡張機能との接続を試行中...");
+
+// 初期化時にストレージをクリア（オプション）
+chrome.storage.local.set({ logs: [], wsStatus: 'disconnected' });
+
+// popup.jsからの再接続メッセージを受信
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'reconnect') {
+        console.log('再接続要求を受信');
+        reconnectAttempts = 0; // 再接続回数をリセット
+        initWebSocketConnection();
+        sendResponse({ success: true });
     }
 });
-
-// 開発者ツール監視を開始
-window.devToolsObserver = new DevToolsObserver(); 
