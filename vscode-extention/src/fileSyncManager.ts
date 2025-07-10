@@ -210,4 +210,4 @@ export class FileSyncManager {
             .map(([key, val]) => `${key}: ${val}`)
             .join('; ');
     }
-} 
+}
