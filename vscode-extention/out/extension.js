@@ -171,11 +171,24 @@ function handleDOMChange(data, url) {
         case 'attribute_changed':
             handleAttributeChanged({ ...data, url });
             break;
+        case 'style_changed':
+            handleStyleChanged({ ...data, url });
+            break;
         case 'text_changed':
             handleTextChanged({ ...data, url });
             break;
         default:
             console.warn('未知のDOM変更タイプ:', data.type);
+    }
+}
+function handleStyleChanged(message) {
+    console.log('style変更を受信:', message);
+    vscode.window.showInformationMessage(`style変更: "${message.newValue}"`);
+    if (message.element && message.url) {
+        const filePath = resolveFilePath(message.url);
+        if (filePath) {
+            updateAttributeInFile(filePath, message.element, 'style', message.newValue);
+        }
     }
 }
 function handleElementAdded(message) {
@@ -206,6 +219,9 @@ function handleElementRemoved(message) {
 }
 function handleAttributeChanged(message) {
     console.log('属性変更を受信:', message);
+    console.log('element.attributes:', message.element.attributes);
+    console.log('attributeName:', message.attributeName);
+    console.log('newValue:', message.newValue);
     vscode.window.showInformationMessage(`属性変更: ${message.attributeName}="${message.newValue}"`);
     // 属性変更をファイルに反映
     if (message.element && message.url) {

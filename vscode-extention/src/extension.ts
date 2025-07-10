@@ -168,11 +168,26 @@ function handleDOMChange(data: any, url: string) {
     case 'attribute_changed':
       handleAttributeChanged({ ...data, url });
       break;
+	case 'style_changed':
+      handleStyleChanged({ ...data, url });
+      break;
     case 'text_changed':
       handleTextChanged({ ...data, url });
       break;
     default:
       console.warn('未知のDOM変更タイプ:', data.type);
+  }
+}
+
+function handleStyleChanged(message: any) {
+  console.log('style変更を受信:', message);
+  vscode.window.showInformationMessage(`style変更: "${message.newValue}"`);
+
+  if (message.element && message.url) {
+    const filePath = resolveFilePath(message.url);
+    if (filePath) {
+      updateAttributeInFile(filePath, message.element, 'style', message.newValue);
+    }
   }
 }
 
@@ -207,7 +222,14 @@ function handleElementRemoved(message: any) {
 }
 
 function handleAttributeChanged(message: any) {
+	if (message.attributeName === 'style') {
+		console.warn('style属性はstyle_changedで処理されます');
+		return;
+	}
 	console.log('属性変更を受信:', message);
+	console.log('element.attributes:', message.element.attributes);
+	console.log('attributeName:', message.attributeName);
+	console.log('newValue:', message.newValue);
 	vscode.window.showInformationMessage(`属性変更: ${message.attributeName}="${message.newValue}"`);
 
 	// 属性変更をファイルに反映
@@ -306,7 +328,7 @@ async function removeElementFromFile(filePath: string, element: any) {
 	const document = await vscode.workspace.openTextDocument(filePath);
 	const text = document.getText();
 
-	const elementId = element.attributes?.id;
+	const elementId = element.id;
 	if (!elementId) {
 		console.warn('ID属性がないため、特定できません');
 		return;
@@ -336,8 +358,8 @@ async function updateAttributeInFile(filePath: string, element: any, attributeNa
 	const text = document.getText();
 
 	// 簡易的に、element.outerHTML が含まれる行を検索する
-	const elementId = element.attributes?.id;
-	if (!elementId) {
+	const elementId = element.id;
+	if (!elementId) {handleAttributeChanged
 		console.warn('ID属性がないため、特定できません');
 		return;
 	}
