@@ -296,6 +296,23 @@ const callback = function (mutationsList, observer) {
                 break;
 
             case 'attributes':
+
+                if (mutation.attributeName === 'style') {
+                    const logMessage = `[${timestamp}] style属性変更: ${getElementInfo(mutation.target)} → "${mutation.oldValue}" → "${mutation.target.getAttribute('style')}"`;
+
+                    const changeData = {
+                        type: 'style_changed',
+                        element: getElementDetails(mutation.target),
+                        oldValue: mutation.oldValue,
+                        newValue: mutation.target.getAttribute('style'),
+                        timestamp: new Date().toISOString()
+                    };
+
+                    saveLog(logMessage);
+                    sendChangeToVSCode(changeData);
+                    break;
+                }
+
                 // 属性変更は遅延ログ記録（hover等の一時的変更を除外）
                 const elementKey = getElementKey(mutation.target, mutation.attributeName);
                 if (elementKey && mutation.target.isConnected) {
