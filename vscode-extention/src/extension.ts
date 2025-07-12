@@ -303,6 +303,22 @@ function resolveFilePath(url: string): string | null {
 	}
 }
 
+// cssSelector から nth-child の値を抽出してindexとして使用
+function extractIndexFromCssSelector(cssSelector: string, tagName: string, className: string): number | null {
+	// 例: 'html > body > div.test-section:nth-child(2) > button.test-button:nth-child(2)'
+	// から button.test-button:nth-child(2) の部分を見つけて、2を抽出
+	
+	const escapedClassName = className.replace(/\s+/g, '\\.');
+	const pattern = new RegExp(`${tagName}\\.${escapedClassName}:nth-child\\((\\d+)\\)`);
+	const match = cssSelector.match(pattern);
+	
+	if (match) {
+		return parseInt(match[1]) - 1; // nth-childは1から始まるので、0ベースのindexに変換
+	}
+	
+	return null;
+}
+
 async function addElementToFile(filePath: string, element: any, parentSelector: any) {
 	// VS CodeのTextDocumentオブジェクトを取得
 	const document = await vscode.workspace.openTextDocument(filePath);
@@ -323,26 +339,76 @@ async function addElementToFile(filePath: string, element: any, parentSelector: 
 	vscode.window.showInformationMessage('要素を追加しました');
 }
 
-
 async function removeElementFromFile(filePath: string, element: any) {
 	const document = await vscode.workspace.openTextDocument(filePath);
 	const text = document.getText();
 
-	const elementId = element.id;
-	if (!elementId) {
-		console.warn('ID属性がないため、特定できません');
+	let regex: RegExp;
+	let elementMatch: RegExpExecArray | null = null;
+
+	// ID が存在する場合は ID で特定
+	if (element.id) {
+		regex = new RegExp(`<[^>]*id=["']${element.id}["'][^>]*>.*?</[^>]+>`, 'gs');
+		elementMatch = regex.exec(text);
+	}
+	// cssSelector から index を抽出して特定
+	else if (element.cssSelector && element.className && element.tagName) {
+		const extractedIndex = extractIndexFromCssSelector(element.cssSelector, element.tagName.toLowerCase(), element.className);
+		
+		if (extractedIndex !== null) {
+			const tagName = element.tagName;
+			const classNames = element.className.trim().split(/\s+/).join('.*?');
+			
+			// 同じtagNameとclassNameを持つ要素をすべて検索
+			const classRegex = new RegExp(`<${tagName}[^>]*class=["'][^"']*\\b${classNames}\\b[^"']*["'][^>]*>.*?</${tagName}>`, 'gs');
+			const matches = [];
+			let match;
+			
+			while ((match = classRegex.exec(text)) !== null) {
+				matches.push(match);
+				if (matches.length > 1000) break;
+			}
+			
+			// 抽出したindexの要素を取得
+			if (extractedIndex < matches.length) {
+				elementMatch = matches[extractedIndex];
+				console.log(`cssSelectorから抽出したindex: ${extractedIndex}, 該当要素: ${matches.length}個中${extractedIndex + 1}番目`);
+			}
+		}
+	}
+	// fallback: element.index が存在する場合
+	else if (element.className && element.tagName && element.index !== null && element.index >= 0) {
+		const tagName = element.tagName;
+		const classNames = element.className.trim().split(/\s+/).join('.*?');
+		
+		const classRegex = new RegExp(`<${tagName}[^>]*class=["'][^"']*\\b${classNames}\\b[^"']*["'][^>]*>.*?</${tagName}>`, 'gs');
+		const matches = [];
+		let match;
+		
+		while ((match = classRegex.exec(text)) !== null) {
+			matches.push(match);
+			if (matches.length > 1000) break;
+		}
+		
+		if (element.index < matches.length) {
+			elementMatch = matches[element.index];
+		}
+	}
+
+	if (!elementMatch) {
+		console.warn('対象要素が見つかりません', element);
+		console.log('検索情報:', {
+			id: element.id,
+			tagName: element.tagName,
+			className: element.className,
+			cssSelector: element.cssSelector,
+			extractedIndex: element.cssSelector ? extractIndexFromCssSelector(element.cssSelector, element.tagName?.toLowerCase() || '', element.className || '') : null
+		});
 		return;
 	}
 
-	const regex = new RegExp(`<[^>]*id=["']${elementId}["'][^>]*>.*?</[^>]+>`, 'gs');
-	const match = regex.exec(text);
-	if (!match) {
-		console.warn('対象要素が見つかりません');
-		return;
-	}
-
-	const startPos = document.positionAt(match.index);
-	const endPos = document.positionAt(match.index + match[0].length);
+	const startPos = document.positionAt(elementMatch.index);
+	const endPos = document.positionAt(elementMatch.index + elementMatch[0].length);
 	const range = new vscode.Range(startPos, endPos);
 
 	const edit = new vscode.WorkspaceEdit();
@@ -357,24 +423,67 @@ async function updateAttributeInFile(filePath: string, element: any, attributeNa
 	const document = await vscode.workspace.openTextDocument(filePath);
 	const text = document.getText();
 
-	// 簡易的に、element.outerHTML が含まれる行を検索する
-	const elementId = element.id;
-	if (!elementId) {handleAttributeChanged
-		console.warn('ID属性がないため、特定できません');
+	let regex: RegExp;
+	let elementMatch: RegExpExecArray | null = null;
+
+	// ID が存在する場合は ID で特定
+	if (element.id) {
+		regex = new RegExp(`<[^>]*id=["']${element.id}["'][^>]*>`, 'g');
+		elementMatch = regex.exec(text);
+	} 
+	// cssSelector から index を抽出して特定
+	else if (element.cssSelector && element.className && element.tagName) {
+		const extractedIndex = extractIndexFromCssSelector(element.cssSelector, element.tagName.toLowerCase(), element.className);
+		
+		if (extractedIndex !== null) {
+			const tagName = element.tagName;
+			const classNames = element.className.trim().split(/\s+/).join('.*?');
+			
+			// 同じtagNameとclassNameを持つ要素をすべて検索
+			const classRegex = new RegExp(`<${tagName}[^>]*class=["'][^"']*\\b${classNames}\\b[^"']*["'][^>]*>`, 'g');
+			const matches = [];
+			let match;
+			
+			while ((match = classRegex.exec(text)) !== null) {
+				matches.push(match);
+				if (matches.length > 1000) break;
+			}
+			
+			// 抽出したindexの要素を取得
+			if (extractedIndex < matches.length) {
+				elementMatch = matches[extractedIndex];
+				console.log(`cssSelectorから抽出したindex: ${extractedIndex}`);
+			}
+		}
+	}
+	// fallback: element.index が存在する場合
+	else if (element.className && element.tagName && element.index !== null && element.index >= 0) {
+		const tagName = element.tagName;
+		const classNames = element.className.trim().split(/\s+/).join('.*?');
+		
+		const classRegex = new RegExp(`<${tagName}[^>]*class=["'][^"']*\\b${classNames}\\b[^"']*["'][^>]*>`, 'g');
+		const matches = [];
+		let match;
+		
+		while ((match = classRegex.exec(text)) !== null) {
+			matches.push(match);
+			if (matches.length > 1000) break;
+		}
+		
+		if (element.index < matches.length) {
+			elementMatch = matches[element.index];
+		}
+	}
+
+	if (!elementMatch) {
+		console.warn('対象要素が見つかりません', element);
 		return;
 	}
 
-	const regex = new RegExp(`<[^>]*id=["']${elementId}["'][^>]*>`, 'g');
-	const match = regex.exec(text);
-	if (!match) {
-		console.warn('対象要素が見つかりません');
-		return;
-	}
-
-	const startPos = document.positionAt(match.index);
-	const endPos = document.positionAt(match.index + match[0].length);
+	const startPos = document.positionAt(elementMatch.index);
+	const endPos = document.positionAt(elementMatch.index + elementMatch[0].length);
 	const range = new vscode.Range(startPos, endPos);
-	let tagText = match[0];
+	let tagText = elementMatch[0];
 
 	// 既存の属性を置き換え or 追加
 	if (tagText.includes(`${attributeName}=`)) {
@@ -394,36 +503,74 @@ async function updateAttributeInFile(filePath: string, element: any, attributeNa
 	vscode.window.showInformationMessage(`属性「${attributeName}」を更新しました`);
 }
 
-
 async function updateTextInFile(filePath: string, parentElement: any, newValue: string) {
 	const document = await vscode.workspace.openTextDocument(filePath);
 	const text = document.getText();
 
-	const parentId = parentElement.id;
-	if (!parentId) {
-		console.warn('ID属性がないため、特定できません');
+	let elementMatch: RegExpExecArray | null = null;
+	const tagName = parentElement.tagName.toLowerCase();
+
+	// ID が存在する場合は ID で特定
+	if (parentElement.id) {
+		const regex = new RegExp(
+			`<${tagName}[^>]*id=["']${parentElement.id}["'][^>]*>[\\s\\S]*?</${tagName}>`,
+			'g'
+		);
+		elementMatch = regex.exec(text);
+	}
+	// cssSelector から index を抽出して特定
+	else if (parentElement.cssSelector && parentElement.className) {
+		const extractedIndex = extractIndexFromCssSelector(parentElement.cssSelector, tagName, parentElement.className);
+		
+		if (extractedIndex !== null) {
+			const classNames = parentElement.className.trim().split(/\s+/).join('.*?');
+			
+			// 同じtagNameとclassNameを持つ要素をすべて検索
+			const classRegex = new RegExp(`<${tagName}[^>]*class=["'][^"']*\\b${classNames}\\b[^"']*["'][^>]*>[\\s\\S]*?</${tagName}>`, 'g');
+			const matches = [];
+			let match;
+			
+			while ((match = classRegex.exec(text)) !== null) {
+				matches.push(match);
+				if (matches.length > 1000) break;
+			}
+			
+			// 抽出したindexの要素を取得
+			if (extractedIndex < matches.length) {
+				elementMatch = matches[extractedIndex];
+			}
+		}
+	}
+	// fallback: element.index が存在する場合
+	else if (parentElement.className && parentElement.index !== null && parentElement.index >= 0) {
+		const classNames = parentElement.className.trim().split(/\s+/).join('.*?');
+		
+		const classRegex = new RegExp(`<${tagName}[^>]*class=["'][^"']*\\b${classNames}\\b[^"']*["'][^>]*>[\\s\\S]*?</${tagName}>`, 'g');
+		const matches = [];
+		let match;
+		
+		while ((match = classRegex.exec(text)) !== null) {
+			matches.push(match);
+			if (matches.length > 1000) break;
+		}
+		
+		if (parentElement.index < matches.length) {
+			elementMatch = matches[parentElement.index];
+		}
+	}
+
+	if (!elementMatch) {
+		console.warn('対象要素が見つかりません', parentElement);
 		return;
 	}
 
-	const tagName = parentElement.tagName.toLowerCase(); // タグ名も使う
-	const regex = new RegExp(
-		`<${tagName}[^>]*id=["']${parentId}["'][^>]*>[\\s\\S]*?</${tagName}>`,
-		'g'
-	);
-	const match = regex.exec(text);
-	if (!match) {
-		console.warn('対象要素が見つかりません');
-		return;
-	}
-
-	const startPos = document.positionAt(match.index);
-	const endPos = document.positionAt(match.index + match[0].length);
+	const startPos = document.positionAt(elementMatch.index);
+	const endPos = document.positionAt(elementMatch.index + elementMatch[0].length);
 	const range = new vscode.Range(startPos, endPos);
 
 	// 新しいタグを作成
-	const newTag = match[0].replace(/>(.*?)</s, `>${newValue}<`);
+	const newTag = elementMatch[0].replace(/>(.*?)</s, `>${newValue}<`);
 
-	// 実際にファイルが書き換わり、保存
 	const edit = new vscode.WorkspaceEdit();
 	edit.replace(document.uri, range, newTag);
 	await vscode.workspace.applyEdit(edit);

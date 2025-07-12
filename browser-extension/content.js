@@ -132,16 +132,59 @@ function generateCSSSelector(element) {
     return path.join(' > ');
 }
 
+// 要素のインデックスを取得（同じclassName+tagNameの要素群での位置）
+function getElementIndex(element) {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+        return -1;
+    }
+
+    const tagName = element.tagName.toLowerCase();
+    const classNameStr = getClassNameString(element);
+
+    // classNameがない場合は-1を返す
+    if (!classNameStr) {
+        return -1;
+    }
+
+    // 同じclassNameとtagNameを持つ要素をすべて取得
+    const classes = classNameStr.trim().split(/\s+/);
+    const selector = `${tagName}.${classes.join('.')}`;
+    
+    try {
+        const elements = document.querySelectorAll(selector);
+        // 対象要素のインデックスを取得
+        return Array.from(elements).indexOf(element);
+    } catch (error) {
+        console.warn('Invalid selector:', selector, error);
+        return -1;
+    }
+}
+
 // 要素の詳細情報を取得
 function getElementDetails(element) {
     if (!element || element.nodeType !== Node.ELEMENT_NODE) {
         return null;
     }
 
+    const tagName = element.tagName.toLowerCase();
+    const id = element.id || null;
+    const className = getClassNameString(element) || null;
+    
+    // IDがある場合は優先的に使用、ない場合はclassName+tagName+indexで特定
+    let index = null;
+    if (!id && className) {
+        index = getElementIndex(element);
+        // インデックスが取得できない場合は-1を設定
+        if (index === -1) {
+            index = null;
+        }
+    }
+
     return {
-        tagName: element.tagName.toLowerCase(),
-        id: element.id || null,
-        className: getClassNameString(element) || null,
+        tagName: tagName,
+        id: id,
+        className: className,
+        index: index,
         textContent: element.textContent ? element.textContent.substring(0, 100) : null,
         cssSelector: generateCSSSelector(element),
         outerHTML: element.outerHTML ? element.outerHTML.substring(0, 200) : null,
