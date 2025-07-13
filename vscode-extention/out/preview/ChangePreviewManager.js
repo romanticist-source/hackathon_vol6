@@ -111,7 +111,7 @@ class ChangePreviewManager {
      * スタイル変更を処理
      */
     async handleStyleChange(data) {
-        console.log('ChangePreviewManager.handleStyleChange', data);
+        console.log('[DEBUG] ChangePreviewManager.handleStyleChange', data);
         if (!this.isEnabled) {
             // プレビュー機能が無効な場合は直接適用
             return this.applyChangeDirectly(data);

@@ -131,6 +131,7 @@ export class ChangeDataManager {
     }
 
     private applyStyleChange(content: string, change: ChangeData): string {
+        console.log('[DEBUG] applyStyleChange', change);
         if (!change.selector || !change.property) return content;
 
         const selector = change.selector;

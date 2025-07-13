@@ -71,6 +71,29 @@ class DOMChangeHandler {
                     console.log('プレビュー分岐: element_remove', message.data);
                     await this.changePreviewManager.handleElementRemoved(message.data);
                     break;
+                case 'style_changed': {
+                    // 旧styleと新styleをオブジェクト化
+                    const oldStyles = parseStyleString(message.data.oldValue || '');
+                    const newStyles = parseStyleString(message.data.newValue || '');
+                    // 変化したプロパティだけ抽出して1つずつhandleStyleChange
+                    for (const prop in newStyles) {
+                        if (oldStyles[prop] !== newStyles[prop]) {
+                            console.log('[DEBUG] style_changed→handleStyleChange', {
+                                url: message.url,
+                                selector: message.data.selector,
+                                property: prop,
+                                value: newStyles[prop]
+                            });
+                            await this.changePreviewManager.handleStyleChange({
+                                url: message.url,
+                                selector: message.data.selector,
+                                property: prop,
+                                value: newStyles[prop]
+                            });
+                        }
+                    }
+                    break;
+                }
                 default:
                     console.warn('未知のメッセージタイプ:', message.type);
             }
@@ -135,14 +158,29 @@ class DOMChangeHandler {
                     value: data.newValue
                 });
                 break;
-            case 'style_changed':
-                await this.changePreviewManager.handleStyleChange({
-                    url,
-                    selector,
-                    property: data.property,
-                    value: data.newValue
-                });
+            case 'style_changed': {
+                // 旧styleと新styleをオブジェクト化
+                const oldStyles = parseStyleString(data.oldValue || '');
+                const newStyles = parseStyleString(data.newValue || '');
+                // 変化したプロパティだけ抽出して1つずつhandleStyleChange
+                for (const prop in newStyles) {
+                    if (oldStyles[prop] !== newStyles[prop]) {
+                        console.log('[DEBUG] domChangeHandler.ts handleDOMChange→handleStyleChange', {
+                            url,
+                            selector,
+                            property: prop,
+                            value: newStyles[prop]
+                        });
+                        await this.changePreviewManager.handleStyleChange({
+                            url,
+                            selector,
+                            property: prop,
+                            value: newStyles[prop]
+                        });
+                    }
+                }
                 break;
+            }
             case 'element_added':
                 await this.changePreviewManager.handleElementAdded({
                     url,
@@ -177,4 +215,13 @@ class DOMChangeHandler {
     }
 }
 exports.DOMChangeHandler = DOMChangeHandler;
+function parseStyleString(styleStr) {
+    const obj = {};
+    styleStr.split(';').forEach(pair => {
+        const [k, v] = pair.split(':').map(s => s && s.trim());
+        if (k && v)
+            obj[k] = v;
+    });
+    return obj;
+}
 //# sourceMappingURL=domChangeHandler.js.map

@@ -104,6 +104,7 @@ class ChangeDataManager {
         return content;
     }
     applyStyleChange(content, change) {
+        console.log('[DEBUG] applyStyleChange', change);
         if (!change.selector || !change.property)
             return content;
         const selector = change.selector;

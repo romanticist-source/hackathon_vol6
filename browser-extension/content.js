@@ -368,6 +368,9 @@ const callback = function (mutationsList, observer) {
                         timestamp: new Date().toISOString()
                     };
 
+                    // ★ここでデバッグ出力
+                    console.log('[DEBUG] style_changed送信changeData', changeData);
+
                     saveLog(logMessage);
                     sendChangeToVSCode(changeData);
                     break;
