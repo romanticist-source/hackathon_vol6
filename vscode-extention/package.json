@@ -22,6 +22,14 @@
       {
         "command": "browser-to-vscode-sync.stopServer",
         "title": "Stop Browser Sync Server"
+      },
+      {
+        "command": "browser-to-vscode-sync.togglePreview",
+        "title": "Toggle Change Preview"
+      },
+      {
+        "command": "browser-to-vscode-sync.showPreview",
+        "title": "Show Change Preview"
       }
     ],
     "configuration": {

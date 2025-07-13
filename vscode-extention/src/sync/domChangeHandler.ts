@@ -2,20 +2,22 @@ import * as vscode from 'vscode';
 import { FileEditor } from './fileEditor.js';
 import { resolveFilePath } from './utils.js';
 import { FileSyncManager } from '../fileSyncManager.js';
+import { ChangePreviewManager } from '../preview/ChangePreviewManager.js';
 
 export class DOMChangeHandler {
     private fileEditor: FileEditor;
     private fileSyncManager: FileSyncManager;
+    private changePreviewManager: ChangePreviewManager;
 
-    constructor(fileSyncManager: FileSyncManager) {
+    constructor(fileSyncManager: FileSyncManager, changePreviewManager: ChangePreviewManager) {
         this.fileEditor = new FileEditor();
         this.fileSyncManager = fileSyncManager;
+        this.changePreviewManager = changePreviewManager;
     }
 
     public async handleMessage(message: any): Promise<void> {
+        console.log('受信type:', message.type, 'payload:', message);
         try {
-            console.log('ブラウザからのメッセージを受信:', message);
-
             switch (message.type) {
                 case 'dom_change':
                     await this.handleDOMChange(message.data, message.url);
@@ -33,10 +35,24 @@ export class DOMChangeHandler {
                     await this.handleTextChanged(message);
                     break;
                 case 'attribute_change':
-                    await this.fileSyncManager.handleAttributeChange(message.data);
+                    console.log('プレビュー分岐: attribute_change', message.data);
+                    await this.changePreviewManager.handleAttributeChange(message.data);
                     break;
                 case 'style_change':
-                    await this.fileSyncManager.handleStyleChange(message.data);
+                    console.log('プレビュー分岐: style_change', message.data);
+                    await this.changePreviewManager.handleStyleChange(message.data);
+                    break;
+                case 'text_change':
+                    console.log('プレビュー分岐: text_change', message.data);
+                    await this.changePreviewManager.handleTextChange(message.data);
+                    break;
+                case 'element_add':
+                    console.log('プレビュー分岐: element_add', message.data);
+                    await this.changePreviewManager.handleElementAdded(message.data);
+                    break;
+                case 'element_remove':
+                    console.log('プレビュー分岐: element_remove', message.data);
+                    await this.changePreviewManager.handleElementRemoved(message.data);
                     break;
                 default:
                     console.warn('未知のメッセージタイプ:', message.type);
@@ -48,24 +64,74 @@ export class DOMChangeHandler {
     }
 
     private async handleDOMChange(data: any, url: string): Promise<void> {
-        console.log('DOM変更を受信:', data);
-        vscode.window.showInformationMessage(`DOM変更を受信: ${data.type || '不明'}`);
-
+        // text_changedはparent.idやelement.idを最優先で使う
+        if (data.type === 'text_changed') {
+            let selector = data.selector;
+            if (!selector && data.parent && data.parent.id) {
+                selector = `#${data.parent.id}`;
+            } else if (!selector && data.element && data.element.id) {
+                selector = `#${data.element.id}`;
+            }
+            if (!selector || selector === 'script' || selector === 'div') {
+                console.warn('text_changed: 適切なselectorが特定できません', data);
+                return;
+            }
+            await this.changePreviewManager.handleTextChange({
+                url,
+                selector,
+                value: data.newValue
+            });
+            return;
+        }
+        // それ以外は従来通り
+        let selector = data.selector;
+        if (!selector) {
+            if (data.element && data.element.id) {
+                selector = `#${data.element.id}`;
+            } else if (data.parent && data.parent.id) {
+                selector = `#${data.parent.id}`;
+            } else if (data.target && data.target.id) {
+                selector = `#${data.target.id}`;
+            } else if (data.element && data.element.className) {
+                selector = '.' + data.element.className.split(' ').join('.');
+            } else if (data.parent && data.parent.className) {
+                selector = '.' + data.parent.className.split(' ').join('.');
+            } else if (data.element && data.element.tagName) {
+                selector = data.element.tagName.toLowerCase();
+            }
+        }
+        if (!selector) {
+            console.warn('selectorを特定できませんでした', data);
+        }
         switch (data.type) {
-            case 'element_added':
-                await this.handleElementAdded({ ...data, url });
-                break;
-            case 'element_removed':
-                await this.handleElementRemoved({ ...data, url });
-                break;
             case 'attribute_changed':
-                await this.handleAttributeChanged({ ...data, url });
+                await this.changePreviewManager.handleAttributeChange({
+                    url,
+                    selector,
+                    attribute: data.attributeName,
+                    value: data.newValue
+                });
                 break;
             case 'style_changed':
-                await this.handleStyleChanged({ ...data, url });
+                await this.changePreviewManager.handleStyleChange({
+                    url,
+                    selector,
+                    property: data.property,
+                    value: data.newValue
+                });
                 break;
-            case 'text_changed':
-                await this.handleTextChanged({ ...data, url });
+            case 'element_added':
+                await this.changePreviewManager.handleElementAdded({
+                    url,
+                    selector,
+                    elementHTML: data.element?.outerHTML
+                });
+                break;
+            case 'element_removed':
+                await this.changePreviewManager.handleElementRemoved({
+                    url,
+                    selector
+                });
                 break;
             default:
                 console.warn('未知のDOM変更タイプ:', data.type);
@@ -73,71 +139,22 @@ export class DOMChangeHandler {
     }
 
     private async handleStyleChanged(message: any): Promise<void> {
-        console.log('style変更を受信:', message);
-        vscode.window.showInformationMessage(`style変更: "${message.newValue}"`);
-
-        if (message.element && message.url) {
-            const filePath = resolveFilePath(message.url);
-            if (filePath) {
-                await this.fileEditor.updateAttribute(filePath, message.element, 'style', message.newValue);
-            }
-        }
+        // 何もしない（全てhandleStyleChange経由に統一）
     }
 
     private async handleElementAdded(message: any): Promise<void> {
-        console.log('DEBUG: メッセージ全体:', message);
-        console.log('DEBUG: message.url:', message.url);
-        vscode.window.showInformationMessage(`要素追加: ${message.element?.tagName || '不明'}`);
-
-        if (message.element && message.url) {
-            const filePath = resolveFilePath(message.url);
-            console.log('実際のfilePath:', filePath);
-            if (filePath) {
-                await this.fileEditor.addElement(filePath, message.element, message.parent);
-            }
-        }
+        // 何もしない（全てhandleElementAdded経由に統一）
     }
 
     private async handleElementRemoved(message: any): Promise<void> {
-        console.log('要素削除を受信:', message);
-        vscode.window.showInformationMessage(`要素削除: ${message.element?.tagName || '不明'}`);
-
-        if (message.element && message.url) {
-            const filePath = resolveFilePath(message.url);
-            if (filePath) {
-                await this.fileEditor.removeElement(filePath, message.element);
-            }
-        }
+        // 何もしない（全てhandleElementRemoved経由に統一）
     }
 
     private async handleAttributeChanged(message: any): Promise<void> {
-        if (message.attributeName === 'style') {
-            console.warn('style属性はstyle_changedで処理されます');
-            return;
-        }
-        console.log('属性変更を受信:', message);
-        console.log('element.attributes:', message.element.attributes);
-        console.log('attributeName:', message.attributeName);
-        console.log('newValue:', message.newValue);
-        vscode.window.showInformationMessage(`属性変更: ${message.attributeName}="${message.newValue}"`);
-
-        if (message.element && message.url) {
-            const filePath = resolveFilePath(message.url);
-            if (filePath) {
-                await this.fileEditor.updateAttribute(filePath, message.element, message.attributeName, message.newValue);
-            }
-        }
+        // 何もしない（全てhandleAttributeChange経由に統一）
     }
 
     private async handleTextChanged(message: any): Promise<void> {
-        console.log('テキスト変更を受信:', message);
-        vscode.window.showInformationMessage(`テキスト変更: "${message.newValue}"`);
-
-        if (message.parentElement && message.url) {
-            const filePath = resolveFilePath(message.url);
-            if (filePath) {
-                await this.fileEditor.updateText(filePath, message.parentElement, message.newValue);
-            }
-        }
+        // 何もしない（全てhandleTextChange経由に統一）
     }
 }
