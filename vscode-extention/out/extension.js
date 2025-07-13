@@ -28,9 +28,11 @@ const vscode = __importStar(require("vscode"));
 const webSocketManager_js_1 = require("./server/webSocketManager.js");
 const domChangeHandler_js_1 = require("./sync/domChangeHandler.js");
 const fileSyncManager_js_1 = require("./fileSyncManager.js");
+const ChangePreviewManager_js_1 = require("./preview/ChangePreviewManager.js");
 let webSocketManager;
 let domChangeHandler;
 let fileSyncManager;
+let changePreviewManager;
 function activate(context) {
     console.log('Browser to VSCode Sync extension is now active!');
     let startServerCommand = vscode.commands.registerCommand('browser-to-vscode-sync.startServer', () => {
@@ -70,7 +72,8 @@ function startWebSocketServer() {
     try {
         webSocketManager = new webSocketManager_js_1.WebSocketManager();
         fileSyncManager = new fileSyncManager_js_1.FileSyncManager(workspaceRoot);
-        domChangeHandler = new domChangeHandler_js_1.DOMChangeHandler(fileSyncManager);
+        changePreviewManager = new ChangePreviewManager_js_1.ChangePreviewManager(fileSyncManager);
+        domChangeHandler = new domChangeHandler_js_1.DOMChangeHandler(fileSyncManager, changePreviewManager);
         webSocketManager.setMessageHandler((message) => {
             if (domChangeHandler) {
                 domChangeHandler.handleMessage(message);
@@ -93,6 +96,10 @@ function stopWebSocketServer() {
         webSocketManager = undefined;
         fileSyncManager = undefined;
         domChangeHandler = undefined;
+    }
+    if (changePreviewManager) {
+        changePreviewManager.dispose();
+        changePreviewManager = undefined;
     }
 }
 //# sourceMappingURL=extension.js.map

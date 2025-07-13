@@ -2,10 +2,12 @@ import * as vscode from 'vscode';
 import { WebSocketManager } from './server/webSocketManager.js';
 import { DOMChangeHandler } from './sync/domChangeHandler.js';
 import { FileSyncManager } from './fileSyncManager.js';
+import { ChangePreviewManager } from './preview/ChangePreviewManager.js';
 
 let webSocketManager: WebSocketManager | undefined;
 let domChangeHandler: DOMChangeHandler | undefined;
 let fileSyncManager: FileSyncManager | undefined;
+let changePreviewManager: ChangePreviewManager | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Browser to VSCode Sync extension is now active!');
@@ -56,7 +58,8 @@ function startWebSocketServer() {
 	try {
 		webSocketManager = new WebSocketManager();
 		fileSyncManager = new FileSyncManager(workspaceRoot);
-		domChangeHandler = new DOMChangeHandler(fileSyncManager);
+		changePreviewManager = new ChangePreviewManager(fileSyncManager);
+		domChangeHandler = new DOMChangeHandler(fileSyncManager, changePreviewManager);
 
 		webSocketManager.setMessageHandler((message: any) => {
 			if (domChangeHandler) {
@@ -83,5 +86,9 @@ function stopWebSocketServer() {
 		webSocketManager = undefined;
 		fileSyncManager = undefined;
 		domChangeHandler = undefined;
+	}
+	if (changePreviewManager) {
+		changePreviewManager.dispose();
+		changePreviewManager = undefined;
 	}
 }

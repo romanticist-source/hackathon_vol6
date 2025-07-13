@@ -149,7 +149,7 @@ function getElementIndex(element) {
     // 同じclassNameとtagNameを持つ要素をすべて取得
     const classes = classNameStr.trim().split(/\s+/);
     const selector = `${tagName}.${classes.join('.')}`;
-    
+
     try {
         const elements = document.querySelectorAll(selector);
         // 対象要素のインデックスを取得
@@ -169,7 +169,7 @@ function getElementDetails(element) {
     const tagName = element.tagName.toLowerCase();
     const id = element.id || null;
     const className = getClassNameString(element) || null;
-    
+
     // IDがある場合は優先的に使用、ない場合はclassName+tagName+indexで特定
     let index = null;
     if (!id && className) {
@@ -289,6 +289,20 @@ function isInsideIframe(element) {
     return false;
 }
 
+// 要素の堅牢なCSSセレクタを生成
+function getElementSelector(element) {
+    if (!element) return '';
+    if (element.id) return `#${element.id}`;
+    if (element.getAttribute && element.getAttribute('data-testid')) {
+        return `[data-testid="${element.getAttribute('data-testid')}"]`;
+    }
+    if (element.className && typeof element.className === 'string') {
+        const classSelector = '.' + element.className.trim().split(/\s+/).join('.');
+        return element.tagName.toLowerCase() + classSelector;
+    }
+    return element.tagName ? element.tagName.toLowerCase() : '';
+}
+
 // コールバック関数
 const callback = function (mutationsList, observer) {
     for (const mutation of mutationsList) {
@@ -313,6 +327,7 @@ const callback = function (mutationsList, observer) {
                                 type: 'element_added',
                                 element: getElementDetails(node),
                                 parent: getElementDetails(mutation.target),
+                                selector: getElementSelector(node),
                                 timestamp: new Date().toISOString()
                             };
                             sendChangeToVSCode(changeData);
@@ -330,6 +345,7 @@ const callback = function (mutationsList, observer) {
                                 type: 'element_removed',
                                 element: getElementDetails(node),
                                 parent: getElementDetails(mutation.target),
+                                selector: getElementSelector(node),
                                 timestamp: new Date().toISOString()
                             };
                             sendChangeToVSCode(changeData);
@@ -348,8 +364,12 @@ const callback = function (mutationsList, observer) {
                         element: getElementDetails(mutation.target),
                         oldValue: mutation.oldValue,
                         newValue: mutation.target.getAttribute('style'),
+                        selector: getElementSelector(mutation.target),
                         timestamp: new Date().toISOString()
                     };
+
+                    // ★ここでデバッグ出力
+                    console.log('[DEBUG] style_changed送信changeData', changeData);
 
                     saveLog(logMessage);
                     sendChangeToVSCode(changeData);
@@ -374,6 +394,7 @@ const callback = function (mutationsList, observer) {
                         attributeName: mutation.attributeName,
                         oldValue: oldValue,
                         newValue: newValue,
+                        selector: getElementSelector(mutation.target),
                         timestamp: new Date().toISOString()
                     };
 
@@ -393,14 +414,32 @@ const callback = function (mutationsList, observer) {
                 const logMessage = `[${timestamp}] テキスト変更: "${mutation.oldValue}" → "${mutation.target.textContent}"`;
                 saveLog(logMessage);
 
+                // 親要素を堅牢に取得
+                let parentElem = mutation.target.parentElement;
+                if (!parentElem && mutation.target.parentNode && mutation.target.parentNode.nodeType === Node.ELEMENT_NODE) {
+                    parentElem = mutation.target.parentNode;
+                }
+                const selector = getElementSelector(parentElem);
+
+                if (!selector) {
+                    console.warn('text_changed: 適切なselectorが特定できません', {
+                        type: 'text_changed',
+                        oldValue: mutation.oldValue,
+                        newValue: mutation.target.textContent,
+                        parentElement: getElementDetails(parentElem),
+                        timestamp: new Date().toISOString()
+                    });
+                }
                 // VSCode拡張機能に送信
                 const changeData = {
                     type: 'text_changed',
                     oldValue: mutation.oldValue,
                     newValue: mutation.target.textContent,
-                    parentElement: getElementDetails(mutation.target.parentElement),
+                    parentElement: getElementDetails(parentElem),
+                    selector: selector,
                     timestamp: new Date().toISOString()
                 };
+
                 sendChangeToVSCode(changeData);
                 break;
         }
